@@ -323,7 +323,7 @@
 
   async function load() {
     try {
-      const res = await fetch(`/latency?limit=${selected.minutes}`);
+      const res = await fetch(`/pings?limit=${selected.minutes}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const rows = (await res.json()).reverse(); // API returns newest first
       if (!rows.length) {
@@ -336,7 +336,7 @@
       renderChart(current);
     } catch (err) {
       setHeadline("Can't reach the backend", true,
-        "The request to /latency failed. Check that the Rust server is running and that you opened this page from its address, such as http://127.0.0.1:3000.");
+        "The request to /pings failed. Check that the Rust server is running and that you opened this page from its address, such as http://127.0.0.1:3000.");
     }
   }
 
