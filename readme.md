@@ -7,7 +7,7 @@ A small Rust service that checks the [AniList](https://anilist.co) GraphQL API o
 - **API:** a small REST API built with [axum](https://github.com/tokio-rs/axum).
 - **Dashboard:** a single HTML page that graphs the data with [Chart.js](https://www.chartjs.org/).
 
-> **Disclaimer:** Originally made purely with ai but i am touching it up and cleaning up some bad code
+> **Disclaimer:** This project is in active development and likely to breaking changes, as well as the front end being 100% vibe coded lol
 
 ## How it works
 
@@ -76,7 +76,8 @@ docker run -d --name anilist-monitor \
 ```
 
 The file must be named `pings.db` and contain a `pings` table with the columns above. Mount the folder rather than the single file, because SQLite creates temporary files next to the database.
-
+### Deployment
+There is 0 security built in to this, like none. I highly reccomend running it behind a reverse proxy and only if you know what you are doing. To be be honest you shouldnt even need this to be exposed to the internet but if for some bazarre reason you did, I'd reccomend using a reverse proxy
 ## API
 
 | Method | Path              | Description                                                          |
@@ -99,7 +100,7 @@ curl "http://127.0.0.1:3000/latency?limit=2"
 ```
 
 Since there is one check per minute, `limit` is also the number of minutes of history: 60 is an hour, 1440 is a day, and 43200 is 30 days.
-
+#
 ## Dashboard
 
 - **Status headline:** the current response time, or a warning if the last check failed or no check has arrived in the last 3 minutes (usually a sign the poller stopped).
