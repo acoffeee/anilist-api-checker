@@ -1,8 +1,6 @@
-use rusqlite::Connection;
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
-pub type Db = Arc<Mutex<Connection>>;
 
 #[derive(Serialize)]
 pub struct Row {

@@ -1,6 +1,7 @@
 use crate::types::{Db, Row};
 use rusqlite::{Connection, params};
 use std::sync::{Arc, Mutex};
+pub type Db = Arc<Mutex<Connection>>;
 pub fn start_db() -> Db {
     let conn =
         Connection::open(&std::env::var("DATABASE_PATH").unwrap_or_else(|_| "pings.db".into()))
