@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AniList latency</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #e9eef4;
+    --panel: #f7f9fc;
+    --ink: #16263a;
+    --muted: #55677d;
+    --line: #2f63d8;
+    --grid: #d3dce7;
+    --fail: #c8325f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1b2a;
+      --panel: #152537;
+      --ink: #e6edf5;
+      --muted: #93a3b8;
+      --line: #6ea0ff;
+      --grid: #243449;
+      --fail: #ff7a9e;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5;
+  }
+  main { max-width: 1040px; margin: 0 auto; padding: 40px 20px 56px; }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(1.9rem, 5vw, 3.1rem);
+    line-height: 1.1;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    max-width: 18ch;
+  }
+  h1.bad { color: var(--fail); }
+  .sub { margin: 12px 0 0; color: var(--muted); max-width: 60ch; }
+
+  .controls { display: flex; justify-content: flex-end; margin: 32px 0 12px; }
+  .segmented { display: inline-flex; border: 1px solid var(--grid); border-radius: 8px; overflow: hidden; }
+  .segmented button {
+    font: inherit;
+    font-size: 0.9rem;
+    padding: 7px 14px;
+    border: 0;
+    border-right: 1px solid var(--grid);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .segmented button:last-child { border-right: 0; }
+  .segmented button:hover { color: var(--ink); }
+  .segmented button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+  .segmented button:focus-visible { outline: 2px solid var(--line); outline-offset: -2px; }
+
+  .chart-wrap {
+    position: relative;
+    height: 380px;
+    padding: 16px 12px 8px;
+    background: var(--panel);
+    border: 1px solid var(--grid);
+    border-radius: 12px;
+  }
+
+  dl.stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 24px;
+    margin: 28px 0 0;
+  }
+  dl.stats div { border-top: 2px solid var(--grid); padding-top: 10px; }
+  dl.stats dt { color: var(--muted); font-size: 0.9rem; }
+  dl.stats dd { margin: 2px 0 0; font-size: 1.6rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+  @media (max-width: 640px) {
+    main { padding-top: 28px; }
+    .chart-wrap { height: 300px; }
+    dl.stats { grid-template-columns: repeat(2, 1fr); }
+    .controls { justify-content: flex-start; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="headline" aria-live="polite">Loading checks</h1>
+  <p class="sub" id="subline"></p>
+
+  <div class="controls">
+    <div class="segmented" role="group" aria-label="Time range" id="ranges"></div>
+  </div>
+
+  <div class="chart-wrap">
+    <canvas id="chart" role="img" aria-label="Line chart of AniList response time in milliseconds over the selected range"></canvas>
+  </div>
+
+  <dl class="stats">
+    <div><dt>Median</dt><dd id="s-median">–</dd></div>
+    <div><dt>95th percentile</dt><dd id="s-p95">–</dd></div>
+    <div><dt>Slowest</dt><dd id="s-max">–</dd></div>
+    <div><dt>Successful checks</dt><dd id="s-ok">–</dd></div>
+  </dl>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+  // One check per minute, so minutes == number of rows to request.
+  const RANGES = [
+    { label: "1 hour", minutes: 60 },
+    { label: "6 hours", minutes: 360 },
+    { label: "24 hours", minutes: 1440 },
+    { label: "7 days", minutes: 10080 },
+    { label: "30 days", minutes: 43200 },
+  ];
+  const MAX_POINTS = 1000; // longer ranges are averaged into buckets so the chart stays fast
+  const REFRESH_MS = 30000;
+  const STALE_AFTER_S = 180;
+
+  let selected = RANGES[1];
+  let chart = null;
+  let current = [];
+
+  const $ = (id) => document.getElementById(id);
+  const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const ms = (v) => (v == null ? "–" : `${Math.round(v)} ms`);
+
+  function percentile(sorted, p) {
+    if (!sorted.length) return null;
+    const i = Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1));
+    return sorted[i];
+  }
+
+  function ago(seconds) {
+    if (seconds < 60) return `${Math.max(0, Math.round(seconds))} seconds ago`;
+    if (seconds < 3600) return `${Math.round(seconds / 60)} minutes ago`;
+    return `${Math.round(seconds / 3600)} hours ago`;
+  }
+
+  function tickLabel(ts) {
+    const d = new Date(ts * 1000);
+    if (selected.minutes > 10080) {
+      return d.toLocaleDateString([], { month: "short", day: "numeric" });
+    }
+    if (selected.minutes > 1440) {
+      return d.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
+    }
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  // Turns raw rows into chart points. Short ranges stay one point per check;
+  // long ranges are grouped into buckets with an average, a peak and a failure count.
+  function toPoints(rows) {
+    const size = Math.max(1, Math.ceil(rows.length / MAX_POINTS));
+    const points = [];
+    for (let i = 0; i < rows.length; i += size) {
+      const chunk = rows.slice(i, i + size);
+      const oks = chunk.filter((r) => r.ok);
+      const failed = chunk.filter((r) => !r.ok);
+      points.push({
+        ts: chunk[0].ts,
+        tsEnd: chunk[chunk.length - 1].ts,
+        n: chunk.length,
+        okCount: oks.length,
+        avg: oks.length ? oks.reduce((s, r) => s + r.latency_ms, 0) / oks.length : null,
+        max: oks.length ? Math.max(...oks.map((r) => r.latency_ms)) : null,
+        fails: failed.length,
+        status: failed.length ? failed[failed.length - 1].status : 200,
+      });
+    }
+    return points;
+  }
+
+  function buildRangeButtons() {
+    const box = $("ranges");
+    RANGES.forEach((r) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = r.label;
+      b.setAttribute("aria-pressed", String(r === selected));
+      b.addEventListener("click", () => {
+        selected = r;
+        box.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+        load();
+      });
+      box.appendChild(b);
+    });
+  }
+
+  function setHeadline(text, bad, sub) {
+    const h = $("headline");
+    h.textContent = text;
+    h.classList.toggle("bad", !!bad);
+    $("subline").textContent = sub || "";
+  }
+
+  function renderSummary(rows) {
+    const last = rows[rows.length - 1];
+    const age = Date.now() / 1000 - last.ts;
+    const checked = new Date(last.ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+    if (age > STALE_AFTER_S) {
+      setHeadline("No recent checks", true,
+        `The last check ran at ${checked}, ${ago(age)}. Make sure the poller in the Rust server is running.`);
+    } else if (last.ok) {
+      setHeadline(`AniList is responding in ${Math.round(last.latency_ms)} ms`, false,
+        `Last checked at ${checked}, ${ago(age)}.`);
+    } else {
+      const why = last.status === 0
+        ? "AniList did not respond before the timeout."
+        : `AniList returned status ${last.status}, or an error in the response body.`;
+      setHeadline("The last check failed", true, `${why} Checked at ${checked}, ${ago(age)}.`);
+    }
+
+    const okMs = rows.filter((r) => r.ok).map((r) => r.latency_ms).sort((a, b) => a - b);
+    $("s-median").textContent = ms(percentile(okMs, 0.5));
+    $("s-p95").textContent = ms(percentile(okMs, 0.95));
+    $("s-max").textContent = ms(okMs.length ? okMs[okMs.length - 1] : null);
+    $("s-ok").textContent = `${((okMs.length / rows.length) * 100).toFixed(1)}%`;
+  }
+
+  function renderChart(points) {
+    const labels = points.map((p) => tickLabel(p.ts));
+    const latency = points.map((p) => p.avg);
+    const failures = points.map((p) => (p.fails ? 0 : null));
+    const muted = cssVar("--muted");
+    const grid = cssVar("--grid");
+
+    const datasets = [
+      {
+        label: "Response time",
+        data: latency,
+        borderColor: cssVar("--line"),
+        backgroundColor: cssVar("--line"),
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        spanGaps: false,
+      },
+      {
+        label: "Failed check",
+        data: failures,
+        showLine: false,
+        pointStyle: "rectRot",
+        pointRadius: 5,
+        borderColor: cssVar("--fail"),
+        backgroundColor: cssVar("--fail"),
+        clip: false,
+      },
+    ];
+
+    if (chart) {
+      chart.data.labels = labels;
+      chart.data.datasets = datasets;
+      chart.options.scales.x.ticks.color = muted;
+      chart.options.scales.y.ticks.color = muted;
+      chart.options.scales.y.title.color = muted;
+      chart.options.scales.y.grid.color = grid;
+      chart.options.plugins.legend.labels.color = muted;
+      chart.update("none");
+      return;
+    }
+
+    chart = new Chart($("chart"), {
+      type: "line",
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: { mode: "index", intersect: false },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { color: muted, maxTicksLimit: 8, maxRotation: 0 },
+          },
+          y: {
+            beginAtZero: true,
+            grid: { color: grid },
+            ticks: { color: muted },
+            title: { display: true, text: "Response time (ms)", color: muted },
+          },
+        },
+        plugins: {
+          legend: { align: "end", labels: { color: muted, usePointStyle: true, boxWidth: 8 } },
+          tooltip: {
+            callbacks: {
+              title: (items) => {
+                const p = current[items[0].dataIndex];
+                const start = new Date(p.ts * 1000).toLocaleString();
+                if (p.n === 1) return start;
+                const end = new Date(p.tsEnd * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                return `${start} to ${end}`;
+              },
+              label: (item) => {
+                const p = current[item.dataIndex];
+                if (item.datasetIndex === 1) {
+                  if (p.n > 1) return `${p.fails} of ${p.n} checks failed`;
+                  return p.status === 0 ? "Failed: no response" : `Failed: status ${p.status}`;
+                }
+                if (p.n === 1) return `${Math.round(p.avg)} ms`;
+                return `Average ${Math.round(p.avg)} ms, slowest ${Math.round(p.max)} ms`;
+              },
+            },
+            filter: (item) => item.raw !== null,
+          },
+        },
+      },
+    });
+  }
+
+  async function load() {
+    try {
+      const res = await fetch(`/latency?limit=${selected.minutes}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const rows = (await res.json()).reverse(); // API returns newest first
+      if (!rows.length) {
+        setHeadline("No checks yet", false,
+          "The first check runs within a minute of starting the server. This page updates on its own.");
+        return;
+      }
+      current = toPoints(rows);
+      renderSummary(rows); // stats use every raw check, not the bucketed points
+      renderChart(current);
+    } catch (err) {
+      setHeadline("Can't reach the backend", true,
+        "The request to /latency failed. Check that the Rust server is running and that you opened this page from its address, such as http://127.0.0.1:3000.");
+    }
+  }
+
+  buildRangeButtons();
+  load();
+  setInterval(load, REFRESH_MS);
+</script>
+</body>
+</html>
