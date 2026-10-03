@@ -1,21 +1,24 @@
-use std::sync::{Arc, Mutex};
 use rusqlite::Connection;
-type Db = Arc<Mutex<Connection>>;
+use std::sync::{Arc, Mutex};
+
+use serde::{Deserialize, Serialize};
+pub type Db = Arc<Mutex<Connection>>;
 
 #[derive(Serialize)]
-struct Row {
-    ts: i64,
-    ok: bool,
-    status: u16,
-    latency_ms: i64,
+pub struct Row {
+    pub ts: i64,
+    pub ok: bool,
+    pub status: u16,
+    pub latency_ms: i64,
 }
 
 #[derive(Deserialize)]
-struct ListParams {
-    limit: Option<u32>,
+pub struct ListParams {
+    pub limit: Option<u32>,
 }
-struct PingResult {
-    ok: bool,
-    status: u16, // 0 = no response (timeout, DNS, connection error)
-    latency_ms: u128,
+#[derive(Debug, Clone)]
+pub struct PingResult {
+    pub ok: bool,
+    pub status: u16, // 0 = no response (timeout, DNS, connection error)
+    pub latency_ms: i64,
 }

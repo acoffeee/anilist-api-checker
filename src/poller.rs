@@ -1,10 +1,12 @@
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use crate::database::{Db, Row};
-use tokio::time::{interval, MissedTickBehavior};
+use tokio::time::{MissedTickBehavior, interval};
+
+use crate::database::insert_ping;
+use crate::types::{Db, PingResult};
+
 const URL: &str = "https://graphql.anilist.co";
 
-async fn poller(db: Db) {
+pub async fn poller(db: Db) {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
@@ -16,18 +18,18 @@ async fn poller(db: Db) {
     loop {
         tick.tick().await;
         let r = ping(&client).await;
-        let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
 
         let conn = db.lock().unwrap();
-        if let Err(e) = conn.execute(
-            "INSERT INTO pings (ts, ok, status, latency_ms) VALUES (?1, ?2, ?3, ?4)",
-            params![ts, r.ok as i64, r.status, r.latency_ms as i64],
-        ) {
-            eprintln!("insert failed: {e}");
-        }
+        insert_ping(&conn, ts, r.ok, r.status, r.latency_ms).unwrap_or_else(|e| {
+            eprintln!("Failed to insert ping result: {}", e);
+        });
     }
 }
-async fn ping(client: &reqwest::Client) -> PingResult {
+pub async fn ping(client: &reqwest::Client) -> PingResult {
     let body = serde_json::json!({
         "query": "query ($page: Int) { Page(page: $page, perPage: 1) { media { id } } }",
         "variables": { "page": fastrand::u32(1..=5000) }
@@ -37,14 +39,18 @@ async fn ping(client: &reqwest::Client) -> PingResult {
         Ok(r) => {
             let status = r.status();
             let text = r.text().await.unwrap_or_default();
-            let latency_ms = start.elapsed().as_millis();
+            let latency_ms = i64::try_from(start.elapsed().as_millis()).unwrap_or(i64::MAX);
             let ok = status.is_success() && !text.contains("\"errors\"");
-            PingResult { ok, status: status.as_u16(), latency_ms }
+            PingResult {
+                ok,
+                status: status.as_u16(),
+                latency_ms,
+            }
         }
         Err(f) => PingResult {
             ok: false,
             status: f.status().map_or(0, |s| s.as_u16()),
-            latency_ms: start.elapsed().as_millis(),
+            latency_ms: i64::try_from(start.elapsed().as_millis()).unwrap_or(i64::MAX),
         },
     }
 }
