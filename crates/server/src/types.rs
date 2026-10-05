@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use tokio_rusqlite::{Connection, Error};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tokio_rusqlite::rusqlite;
+use tokio_rusqlite::{Connection, Error};
 #[derive(Serialize)]
 pub struct Row {
     pub ts: i64,
@@ -22,7 +22,7 @@ pub struct PingResult {
 }
 #[derive(Debug, Clone)]
 pub struct AppState {
-    pub api_keys: Arc<Vec<String>  >,
+    pub api_keys: Arc<Vec<String>>,
 }
 //ig its cheap to copy so we can just clone it instead of wrapping it in an Arc
 pub type Db = tokio_rusqlite::Connection;

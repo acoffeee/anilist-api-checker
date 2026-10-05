@@ -10,3 +10,4 @@ edition = "2024"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
+dotenv = "0.15.0"

@@ -1,13 +1,10 @@
-use axum::{
-    extract::{
-        Query,
-    State},
-    http::StatusCode,
-    Json,
-
-};
 use crate::database;
-use crate::types::{Db, Row, PingsWithLimitParams};
+use crate::types::{Db, PingsWithLimitParams, Row};
+use axum::{
+    Json,
+    extract::{Query, State},
+    http::StatusCode,
+};
 /// GET /pings_with_limit/limit=100
 pub async fn pings_with_limit(
     State(db): State<Db>,
