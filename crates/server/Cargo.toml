@@ -1,7 +1,17 @@
 [package]
-name = "Server"
+name = "server"
 version = "0.1.0"
+edition = "2024"
+
 [dependencies]
-common = { path = "../common" }
 axum = "0.8"
-rusqlite = { version = "0.32", features = ["bundled"] }
+reqwest = { version = "0.13.5", features = ["json"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = "1.0.151"
+subtle = "2.6.1"
+tokio = {version = "1.53.2", features = ["rt-multi-thread"]}
+tokio-rusqlite = "0.8.0"
+
+[[bin]]
+name = "server"
+path = "src/main.rs"

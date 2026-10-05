@@ -1,5 +1,34 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
+use std::time::Instant;
+use reqwest;
+use serde_json;
+use fastrand;
+use crate::types::PingResult;
+use crate::types::DbResult;
+const URL: &str = "https://graphql.anilist.co";
+pub async fn ping(client: &reqwest::Client) -> PingResult {
+    let body = serde_json::json!({
+        "query": "query ($page: Int) { Page(page: $page, perPage: 1) { media { id } } }",
+        "variables": { "page": fastrand::u32(1..=5000) }
+    });
+    let start = Instant::now();
+    match client.post(URL).json(&body).send().await {
+        Ok(r) => {
+            let status = r.status();
+            let text = r.text().await.unwrap_or_default();
+            let latency_ms = i64::try_from(start.elapsed().as_millis()).unwrap_or(i64::MAX);
+            let ok = status.is_success() && !text.contains("\"errors\"");
+            PingResult {
+                ok,
+                status: status.as_u16(),
+                latency_ms,
+            }
+        }
+        Err(f) => PingResult {
+            ok: false,
+            status: f.status().map_or(0, |s| s.as_u16()),
+            latency_ms: i64::try_from(start.elapsed().as_millis()).unwrap_or(i64::MAX),
+        },
+    }
 }
 
 #[cfg(test)]

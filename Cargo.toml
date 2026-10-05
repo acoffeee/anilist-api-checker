@@ -1,10 +1,12 @@
-# root Cargo.toml
 [workspace]
 members = [
-    "crates/common",
     "crates/Pokers/Faas/*",
-    "crates/server"]
+    "crates/server",
+]
 resolver = "2"
+
+[workspace.package]
+edition = "2024"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

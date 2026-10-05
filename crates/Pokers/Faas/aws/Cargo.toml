@@ -1,7 +1,7 @@
 [package]
 name = "aws"
 version = "0.1.0"
-edition = "2024"
 
 [dependencies]
 aws-sdk-lambda = "1.149.0"
+fastrand = "2.5.0"
