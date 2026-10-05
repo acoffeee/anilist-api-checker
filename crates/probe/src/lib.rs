@@ -5,30 +5,6 @@ use crate::database::insert_ping;
 use crate::types::{Db, PingResult};
 
 const URL: &str = "https://graphql.anilist.co";
-
-pub async fn poller(db: Db) {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()
-        .unwrap();
-
-    let mut tick = interval(Duration::from_secs(60));
-    tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
-
-    loop {
-        tick.tick().await;
-        let r = ping(&client).await;
-        let ts = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
-
-        let conn = db.lock().unwrap();
-        insert_ping(&conn, ts, r.ok, r.status, r.latency_ms).unwrap_or_else(|e| {
-            eprintln!("Failed to insert ping result: {}", e);
-        });
-    }
-}
 pub async fn ping(client: &reqwest::Client) -> PingResult {
     let body = serde_json::json!({
         "query": "query ($page: Int) { Page(page: $page, perPage: 1) { media { id } } }",
@@ -52,5 +28,16 @@ pub async fn ping(client: &reqwest::Client) -> PingResult {
             status: f.status().map_or(0, |s| s.as_u16()),
             latency_ms: i64::try_from(start.elapsed().as_millis()).unwrap_or(i64::MAX),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_works() {
+        let result = add(2, 2);
+        assert_eq!(result, 4);
     }
 }

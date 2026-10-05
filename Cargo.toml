@@ -1,6 +1,9 @@
 # root Cargo.toml
 [workspace]
-members = ["crates/*"]
+members = [
+    "crates/common",
+    "crates/Pokers/Faas/*",
+    "crates/server"]
 resolver = "2"
 
 [workspace.dependencies]
