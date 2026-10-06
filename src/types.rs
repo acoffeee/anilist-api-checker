@@ -14,11 +14,19 @@ pub struct Row {
 pub struct PingsWithLimitParams {
     pub limit: Option<u32>,
 }
-#[derive(Debug, Clone)]
-pub struct PingResult {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Ping {
     pub ok: bool,
     pub status: u16, // 0 = no response (timeout, DNS, connection error)
     pub latency_ms: i64,
+    pub region: String,
+    pub time: i64,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct responsePing {
+    pub success: bool,
+    //a vps would use this to determine when to ping again, but faas doesnt use this
+    pub time_to_next_ping: i64
 }
 #[derive(Debug, Clone)]
 pub struct AppState {

@@ -14,6 +14,9 @@ use database::start_db;
 use tokio::net::TcpListener;
 use types::AppState;
 use dotenv::dotenv;
+#[cfg(feature = "faas")]
+mod scheduler;
+
 #[tokio::main]
 async fn main() {
     dotenv().ok();
@@ -31,7 +34,7 @@ async fn main() {
         api_keys: std::sync::Arc::new(api_keys),
     };
     let db = start_db().await;
-
+    
     let app = Router::new()
         .route("/", get(root))
         .route("/pings", get(pings_with_limit))
