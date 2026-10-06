@@ -26,7 +26,7 @@ async fn init_schema(db: &Db) {
             [],
         )?;
         conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_region_ts ON pings (region, ts)",
+            "CREATE INDEX IF NOT EXISTS idx_region ON pings (region)",
             [],
         )?;
         Ok::<_, rusqlite::Error>(())
@@ -42,8 +42,7 @@ pub async fn fetch_latest_row(db: &Db) -> DbResult<Option<Row>> {
 
 /// The `limit` most recent pings, newest first.
 pub async fn fetch_latest_rows(db: &Db, limit: u32) -> DbResult<Vec<Row>> {
-    db.call(move |conn| sql::fetch_latest_rows(conn, limit))
-        .await
+    db.call(move |conn| sql::fetch_latest_rows(conn, limit)).await
 }
 
 pub async fn insert_ping(
@@ -62,7 +61,7 @@ pub async fn insert_ping(
 
 mod sql {
     use crate::types::Row;
-    use tokio_rusqlite::rusqlite::{self, Connection, OptionalExtension, params};
+    use tokio_rusqlite::rusqlite::{self, params, Connection, OptionalExtension};
 
     pub(super) fn row_from(r: &rusqlite::Row) -> rusqlite::Result<Row> {
         Ok(Row {
@@ -74,8 +73,8 @@ mod sql {
     }
 
     pub(super) fn fetch_latest_rows(conn: &Connection, limit: u32) -> rusqlite::Result<Vec<Row>> {
-        let mut stmt =
-            conn.prepare("SELECT ts, ok, status, latency_ms FROM pings ORDER BY ts DESC LIMIT ?1")?;
+        let mut stmt = conn
+            .prepare("SELECT ts, ok, status, latency_ms FROM pings ORDER BY ts DESC LIMIT ?1")?;
         let rows = stmt
             .query_map(params![limit], row_from)?
             .collect::<rusqlite::Result<Vec<_>>>()?;

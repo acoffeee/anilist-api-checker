@@ -1,11 +1,19 @@
-use std::time::Instant;
+// "Pokes" the anilist api to check if its up
+//dont poke the bear too much!
 use reqwest;
-use serde_json;
-use fastrand;
-use crate::types::PingResult;
-use crate::types::DbResult;
-const URL: &str = "https://graphql.anilist.co";
-pub async fn ping(client: &reqwest::Client) -> PingResult {
+use std::time::Instant;
+use serde::{Deserialize, Serialize};
+
+pub const URL: &str = "https://graphql.anilist.co";
+
+
+#[derive(Serialize, Deserialize)]
+pub struct PingResult {
+    pub ok: bool,
+    pub status: u16,
+    pub latency_ms: i64,
+}
+pub async fn poker(client: &reqwest::Client) -> PingResult {
     let body = serde_json::json!({
         "query": "query ($page: Int) { Page(page: $page, perPage: 1) { media { id } } }",
         "variables": { "page": fastrand::u32(1..=5000) }

@@ -1,2 +1,0 @@
-The only thing this should do is serve the front end and the api, and an internal timer of when each service should ping again.
-instead of having a loop that calls other services, i will keep a timer, and on start when other services start they will make a request to /sync to get an initial time

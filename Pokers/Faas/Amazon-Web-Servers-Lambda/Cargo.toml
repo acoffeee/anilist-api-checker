@@ -1,0 +1,11 @@
+[package]
+name = "amazon-web-servers-lambda"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde_json = "1"
+Poker = { path = "../../Poker" }
+lambda_runtime = "1.0.1"
+tokio = { version = "1", features = ["macros"] }
+reqwest = { version = "0.13.5", features = ["json"] }
