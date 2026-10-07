@@ -21,6 +21,7 @@ If you want to run integration tests locally, you can use the `cargo lambda watc
 
 First, run `cargo lambda watch` to start a local server. When you make changes to the code, the server will automatically restart.
 
+t
 Second, you'll need a way to pass the event data to the lambda function.
 
 You can use the existent [event payloads](https://github.com/awslabs/aws-lambda-rust-runtime/tree/main/lambda-events/src/fixtures) in the Rust Runtime repository if your lambda function is using one of the supported event types.

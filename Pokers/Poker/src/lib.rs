@@ -9,6 +9,7 @@ pub const URL: &str = "https://graphql.anilist.co";
 
 #[derive(Serialize, Deserialize)]
 pub struct PingResult {
+    pub time: i64
     pub ok: bool,
     pub status: u16,
     pub latency_ms: i64,
@@ -26,12 +27,14 @@ pub async fn poker(client: &reqwest::Client) -> PingResult {
             let latency_ms = i64::try_from(start.elapsed().as_millis()).unwrap_or(i64::MAX);
             let ok = status.is_success() && !text.contains("\"errors\"");
             PingResult {
+                time: start,
                 ok,
                 status: status.as_u16(),
-                latency_ms,
+                latency_ms
             }
         }
         Err(f) => PingResult {
+            time: start,
             ok: false,
             status: f.status().map_or(0, |s| s.as_u16()),
             latency_ms: i64::try_from(start.elapsed().as_millis()).unwrap_or(i64::MAX),

@@ -1,11 +1,12 @@
 use axum::{Json, extract::State, http::StatusCode};
 
 use crate::database;
-use crate::types::{Db, Row};
+use crate::types::{AppState, Ping};
 /// GET /pings/latest
-pub async fn pings_latest(State(db): State<Db>) -> Result<Json<Row>, StatusCode> {
-    match database::fetch_latest_row(&db).await {
-        Ok(Some(row)) => Ok(Json(row)),
+pub async fn pings_latest(state: State<AppState>) -> Result<Json<Ping>, StatusCode> {
+    let db = state.db.clone();
+    match database::fetch_latest_ping(&db).await {
+        Ok(Some(Ping)) => Ok(Json(Ping)),
         Ok(None) => Err(StatusCode::NOT_FOUND),
         Err(e) => {
             eprintln!("{e}");

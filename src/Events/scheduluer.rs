@@ -1,12 +1,10 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
+use std::sync::Arc;
 use tokio::sync::watch;
 use tokio::time::{interval_at, Instant, MissedTickBehavior};
-
-use crate::minute::until_next_minute;
-
+use crate::Events::EventRunner::run_events;
 const PERIOD: Duration = Duration::from_secs(60);
-
+use crate::types::AppState;
 /// Snapshot of one tick of the loop.
 #[derive(Clone, Copy, Debug)]
 pub struct TickInfo {
@@ -60,12 +58,12 @@ fn unix_minute_now() -> i64 {
 /// `on_tick` runs inside the loop task, so keep it quick: spawn the real work
 /// (the Lambda invokes) with `tokio::spawn` so a slow region can't delay the
 /// next tick.
-pub fn spawn_loop<F>(mut on_tick: F) -> LoopHandle
+pub fn spawn_loop<F>(mut on_tick: F, state: &Arc<AppState>) -> LoopHandle
 where
     F: FnMut(TickInfo) + Send + 'static,
 {
     let (tx, rx) = watch::channel(None);
-
+    let state_clone = state.clone();
     tokio::spawn(async move {
         let start = Instant::now() + until_next_minute();
         let mut ticker = interval_at(start, PERIOD);
@@ -82,10 +80,26 @@ where
                 unix_secs: unix_minute_now(),
             };
             let _ = tx.send(Some(info)); // publish state for anyone asking
-            on_tick(info);
+            run_events(&state_clone);
         }
     });
 
     LoopHandle { rx }
 }
 
+fn until_next_minute() -> Duration {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock is before 1970");
+
+    let seconds = now.as_secs();
+    let nanos = now.subsec_nanos();
+
+    let seconds_into_minute = seconds % 60;
+
+    let remaining_seconds = 59 - seconds_into_minute;
+    let remaining_nanos = 1_000_000_000 - nanos;
+
+    Duration::from_secs(remaining_seconds)
+        + Duration::from_nanos(remaining_nanos as u64)
+}

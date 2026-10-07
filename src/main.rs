@@ -12,11 +12,10 @@ use crate::api::routes::{
 };
 use database::start_db;
 use tokio::net::TcpListener;
-use types::AppState;
+use types::{AppState, Pokers};
 use dotenv::dotenv;
-#[cfg(feature = "faas")]
-mod scheduler;
-
+mod Events;
+use std::sync::Arc;
 #[tokio::main]
 async fn main() {
     dotenv().ok();
@@ -30,21 +29,25 @@ async fn main() {
         .map(|k| k.trim().to_string())
         .filter(|k| !k.is_empty())
         .collect();
-    let api_keys = AppState {
-        api_keys: std::sync::Arc::new(api_keys),
-    };
     let db = start_db().await;
-    
+    let event_list = Pokers {
+        aws_lambda: false
+    };
+    let state = AppState {
+        api_keys: Arc::new(api_keys),
+        db: Arc::new(db),
+        pokers: Arc::new(event_list)
+    };
     let app = Router::new()
         .route("/", get(root))
         .route("/pings", get(pings_with_limit))
         .route("/pings/latest", get(pings_latest))
         .route("/private/insert_ping", post(insert_ping))
         .route_layer(middleware::from_fn_with_state(
-            api_keys.clone(),
+            state.clone(),
             api::middleware::require_api_key,
         ))
-        .with_state(db);
+        .with_state(state);
 
     let listener = TcpListener::bind(&format!("0.0.0.0:{}", port))
         .await

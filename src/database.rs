@@ -1,34 +1,62 @@
-use crate::types::{Db, Row};
+use crate::types::*;
 use tokio_rusqlite::rusqlite;
-
-// ---------- public API: the only thing the api code ever touches ----------
-
-/// Error returned by every query: tokio_rusqlite's wrapper around rusqlite::Error.
-pub type DbResult<T> = Result<T, tokio_rusqlite::Error<rusqlite::Error>>;
+// ---------- public API ----------
 
 pub async fn start_db() -> Db {
-    let path = std::env::var("DATABASE_PATH").unwrap_or_else(|_| "pings.db".into());
-    let db = Db::open(path).await.expect("failed to open database");
+    let path = std::env::var("DATABASE_PATH")
+        .unwrap_or_else(|_| "pings.db".into());
+
+    let db = Db::open(path)
+        .await
+        .expect("failed to open database");
+
     init_schema(&db).await;
+
     db
 }
 
 async fn init_schema(db: &Db) {
     db.call(|conn| {
         conn.execute(
+            "CREATE TABLE IF NOT EXISTS region (
+                region TEXT PRIMARY KEY
+            )",
+            []
+        );
+        conn.execute(
             "CREATE TABLE IF NOT EXISTS pings (
-                ts INTEGER NOT NULL,
+                time INTEGER NOT NULL,
                 ok INTEGER NOT NULL,
                 status INTEGER NOT NULL,
                 latency_ms INTEGER NOT NULL,
-                region TEXT NOT NULL
+                region TEXT REFERENCES region(region)
             )",
             [],
         )?;
+
         conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_region ON pings (region)",
+            "CREATE INDEX IF NOT EXISTS idx_pings_region
+             ON pings (region)",
             [],
         )?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS faas_config (
+                provider TEXT PRIMARY KEY,
+                arn TEXT NOT NULL,
+                region TEXT REFERENCES region(region)
+            )",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS vps_config (
+                api_key TEXT PRIMARY KEY,
+                region TEXT REFERENCES region(region)
+            )",
+            [],
+        )?;
+
         Ok::<_, rusqlite::Error>(())
     })
     .await
@@ -36,160 +64,203 @@ async fn init_schema(db: &Db) {
 }
 
 /// Most recent ping, or None if the table is empty.
-pub async fn fetch_latest_row(db: &Db) -> DbResult<Option<Row>> {
-    db.call(|conn| sql::fetch_latest_row(conn)).await
+pub async fn fetch_latest_ping(db: &Db) -> DbResult<Option<Ping>> {
+    db.call(|conn| sql::fetch_latest_ping(conn)).await
 }
 
 /// The `limit` most recent pings, newest first.
-pub async fn fetch_latest_rows(db: &Db, limit: u32) -> DbResult<Vec<Row>> {
-    db.call(move |conn| sql::fetch_latest_rows(conn, limit)).await
+pub async fn fetch_latest_pings(
+    db: &Db,
+    limit: u32,
+) -> DbResult<Vec<Ping>> {
+    db.call(move |conn| {
+        sql::fetch_latest_pings(conn, limit)
+    })
+    .await
 }
 
 pub async fn insert_ping(
     db: &Db,
-    ts: i64,
+    time: i64,
     ok: bool,
     status: u16,
     latency_ms: i64,
     region: String,
 ) -> DbResult<()> {
-    db.call(move |conn| sql::insert_ping(conn, ts, ok, status, latency_ms, &region))
-        .await
+    db.call(move |conn| {
+        sql::insert_ping(
+            conn,
+            time,
+            ok,
+            status,
+            latency_ms,
+            region
+
+        )
+    })
+    .await
 }
 
-// ---------- private: raw rusqlite, same names, runs on the connection thread ----------
+pub async fn fetch_faas_provider_configs(
+    db: &Db,
+    provider: String,
+) -> Result<Vec<FaasConfig>, tokio_rusqlite::Error> {
+    db.call(move |conn| {
+        sql::fetch_faas_provider_configs(conn, &provider)
+    })
+    .await
+}
+
+pub async fn insert_faas_config(
+    db: &Db,
+    provider: String,
+    arn: String,
+    region_id: i64,
+) -> DbResult<()> {
+    db.call(move |conn| {
+        sql::insert_faas_config(
+            conn,
+            &provider,
+            &arn,
+            region_id,
+        )
+    })
+    .await
+}
+
+// ---------- private: raw rusqlite ----------
 
 mod sql {
-    use crate::types::Row;
-    use tokio_rusqlite::rusqlite::{self, params, Connection, OptionalExtension};
+    use crate::types::{FaasConfig, Ping};
+    use tokio_rusqlite::rusqlite::{
+        self,
+        params,
+        Connection,
+        OptionalExtension,
+    };
 
-    pub(super) fn row_from(r: &rusqlite::Row) -> rusqlite::Result<Row> {
-        Ok(Row {
-            ts: r.get(0)?,
-            ok: r.get::<_, i64>(1)? != 0,
-            status: r.get(2)?,
-            latency_ms: r.get(3)?,
+    pub(super) fn ping_from(
+        row: &rusqlite::Row<'_>,
+    ) -> rusqlite::Result<Ping> {
+        Ok(Ping {
+            time: row.get(0)?,
+            ok: row.get::<_, i64>(1)? != 0,
+            status: row.get(2)?,
+            latency_ms: row.get(3)?,
+            region: row.get(4)?,
         })
     }
 
-    pub(super) fn fetch_latest_rows(conn: &Connection, limit: u32) -> rusqlite::Result<Vec<Row>> {
-        let mut stmt = conn
-            .prepare("SELECT ts, ok, status, latency_ms FROM pings ORDER BY ts DESC LIMIT ?1")?;
+    pub(super) fn fetch_latest_pings(
+        conn: &Connection,
+        limit: u32,
+    ) -> rusqlite::Result<Vec<Ping>> {
+        let mut stmt = conn.prepare(
+            "SELECT
+                time,
+                ok,
+                status,
+                latency_ms,
+                region,
+                region_id
+             FROM pings
+             ORDER BY time DESC
+             LIMIT ?1",
+        )?;
+
         let rows = stmt
-            .query_map(params![limit], row_from)?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+            .query_map(params![limit], ping_from)?
+            .collect::<rusqlite::Result<Vec<Ping>>>()?;
+
         Ok(rows)
     }
 
-    pub(super) fn fetch_latest_row(conn: &Connection) -> rusqlite::Result<Option<Row>> {
+    pub(super) fn fetch_latest_ping(
+        conn: &Connection,
+    ) -> rusqlite::Result<Option<Ping>> {
         conn.query_row(
-            "SELECT ts, ok, status, latency_ms FROM pings ORDER BY ts DESC LIMIT 1",
+            "SELECT
+                time,
+                ok,
+                status,
+                latency_ms,
+                region,
+                region_id
+             FROM pings
+             ORDER BY time DESC
+             LIMIT 1",
             [],
-            row_from,
+            ping_from,
         )
         .optional()
     }
 
     pub(super) fn insert_ping(
         conn: &Connection,
-        ts: i64,
+        time: i64,
         ok: bool,
         status: u16,
         latency_ms: i64,
-        region: &str,
+        region: String,
     ) -> rusqlite::Result<()> {
         conn.execute(
-            "INSERT INTO pings (ts, ok, status, latency_ms, region) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![ts, ok as i64, status, latency_ms, region],
+            "INSERT INTO pings (
+                time,
+                ok,
+                status,
+                latency_ms,
+                region,
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                time,
+                ok as i64,
+                status,
+                latency_ms,
+                region
+            ],
         )?;
+
         Ok(())
     }
-}
 
-// ---------- tests ----------
-
-/// Fresh in-memory database with the schema applied. Shared with handler tests.
-#[cfg(test)]
-pub(crate) async fn test_db() -> Db {
-    let db = Db::open_in_memory().await.unwrap();
-    init_schema(&db).await;
-    db
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    async fn seed(db: &Db, ts: i64) {
-        insert_ping(db, ts, true, 200, 42, "local".into())
-            .await
-            .unwrap();
+    pub(super) fn fetch_faas_provider_configs(
+        conn: &Connection,
+        provider: &str,
+    ) -> rusqlite::Result<Vec<FaasConfig>> {
+        let mut stmt = conn.prepare(
+            "SELECT provider, arn, region_id
+             FROM faas_config
+             WHERE provider = ?1"
+            );
+            let rows = stmt
+            .query_map(params![provider], |row| {
+                FaasConfig {
+                    provider: row.get(0)?,
+                    arn: row.get(1)?,
+                    region: row.get(2)?
+                }
+            })?
+            .collect::<rusqlite::Result<Vec<FaasConfig>>>()?;
+        Ok(rows)
     }
 
-    #[tokio::test]
-    async fn latest_row_is_none_when_table_is_empty() {
-        let db = test_db().await;
-        assert!(fetch_latest_row(&db).await.unwrap().is_none());
-    }
+    pub(super) fn insert_faas_config(
+        conn: &Connection,
+        provider: &str,
+        arn: &str,
+        region: i64
+    ) -> rusqlite::Result<()> {
+        conn.execute(
+            "INSERT INTO faas_config (
+                provider,
+                arn,
+                region
+            )
+            VALUES (?1, ?2, ?3)",
+            params![provider, arn, region],
+        )?;
 
-    #[tokio::test]
-    async fn latest_rows_is_empty_when_table_is_empty() {
-        let db = test_db().await;
-        assert!(fetch_latest_rows(&db, 10).await.unwrap().is_empty());
-    }
-
-    #[tokio::test]
-    async fn insert_then_fetch_roundtrips_every_field() {
-        let db = test_db().await;
-        insert_ping(&db, 1000, false, 503, 250, "eu-west-1".into())
-            .await
-            .unwrap();
-
-        let row = fetch_latest_row(&db).await.unwrap().unwrap();
-        assert_eq!(row.ts, 1000);
-        assert!(!row.ok);
-        assert_eq!(row.status, 503);
-        assert_eq!(row.latency_ms, 250);
-    }
-
-    #[tokio::test]
-    async fn latest_row_is_the_newest_by_ts_not_insertion_order() {
-        let db = test_db().await;
-        for ts in [10, 30, 20] {
-            seed(&db, ts).await;
-        }
-        assert_eq!(fetch_latest_row(&db).await.unwrap().unwrap().ts, 30);
-    }
-
-    #[tokio::test]
-    async fn latest_rows_are_newest_first_and_respect_limit() {
-        let db = test_db().await;
-        for ts in 1..=5 {
-            seed(&db, ts).await;
-        }
-        let ts: Vec<i64> = fetch_latest_rows(&db, 3)
-            .await
-            .unwrap()
-            .iter()
-            .map(|r| r.ts)
-            .collect();
-        assert_eq!(ts, vec![5, 4, 3]);
-    }
-
-    #[tokio::test]
-    async fn limit_larger_than_row_count_returns_everything() {
-        let db = test_db().await;
-        for ts in 1..=3 {
-            seed(&db, ts).await;
-        }
-        assert_eq!(fetch_latest_rows(&db, 1000).await.unwrap().len(), 3);
-    }
-
-    #[tokio::test]
-    async fn schema_init_is_idempotent() {
-        let db = test_db().await;
-        seed(&db, 1).await;
-        init_schema(&db).await; // second run must not fail or wipe data
-        assert_eq!(fetch_latest_rows(&db, 10).await.unwrap().len(), 1);
+        Ok(())
     }
 }

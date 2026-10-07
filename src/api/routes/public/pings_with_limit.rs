@@ -1,5 +1,5 @@
 use crate::database;
-use crate::types::{Db, PingsWithLimitParams, Row};
+use crate::types::{Db, PingsWithLimitParams, Ping};
 use axum::{
     Json,
     extract::{Query, State},
@@ -9,9 +9,9 @@ use axum::{
 pub async fn pings_with_limit(
     State(db): State<Db>,
     Query(params): Query<PingsWithLimitParams>,
-) -> Result<Json<Vec<Row>>, StatusCode> {
+) -> Result<Json<Vec<Ping>>, StatusCode> {
     let limit = params.limit.unwrap_or(100).min(1000);
-    database::fetch_latest_rows(&db, limit)
+    database::fetch_latest_pings(&db, limit)
         .await
         .map(Json)
         .map_err(|e| {
