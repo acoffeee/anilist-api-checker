@@ -81,20 +81,16 @@ pub async fn fetch_latest_pings(
 
 pub async fn insert_ping(
     db: &Db,
-    time: i64,
-    ok: bool,
-    status: u16,
-    latency_ms: i64,
-    region: String,
+    ping: Ping
 ) -> DbResult<()> {
     db.call(move |conn| {
         sql::insert_ping(
             conn,
-            time,
-            ok,
-            status,
-            latency_ms,
-            region
+            ping.time,
+            ping.ok,
+            ping.status,
+            ping.latency_ms,
+            ping.region
 
         )
     })
@@ -115,14 +111,14 @@ pub async fn insert_faas_config(
     db: &Db,
     provider: String,
     arn: String,
-    region_id: i64,
+    region: String
 ) -> DbResult<()> {
     db.call(move |conn| {
         sql::insert_faas_config(
             conn,
             &provider,
             &arn,
-            region_id,
+            region
         )
     })
     .await
@@ -199,7 +195,7 @@ mod sql {
         conn: &Connection,
         time: i64,
         ok: bool,
-        status: u16,
+        status: i64,
         latency_ms: i64,
         region: String,
     ) -> rusqlite::Result<()> {
@@ -233,13 +229,13 @@ mod sql {
              FROM faas_config
              WHERE provider = ?1"
             );
-            let rows = stmt
+            let rows = stmt?
             .query_map(params![provider], |row| {
-                FaasConfig {
+                Ok( FaasConfig {
                     provider: row.get(0)?,
                     arn: row.get(1)?,
                     region: row.get(2)?
-                }
+                })
             })?
             .collect::<rusqlite::Result<Vec<FaasConfig>>>()?;
         Ok(rows)
@@ -249,7 +245,7 @@ mod sql {
         conn: &Connection,
         provider: &str,
         arn: &str,
-        region: i64
+        region: String
     ) -> rusqlite::Result<()> {
         conn.execute(
             "INSERT INTO faas_config (

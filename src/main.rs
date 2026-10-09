@@ -35,20 +35,26 @@ async fn main() {
     };
     let state = AppState {
         api_keys: Arc::new(api_keys),
-        db: Arc::new(db),
-        pokers: Arc::new(event_list)
+        db,
+        pokers: Arc::new(event_list),
     };
-    let app = Router::new()
-        .route("/", get(root))
+    
+    let public_endpoints = Router::new()
         .route("/pings", get(pings_with_limit))
-        .route("/pings/latest", get(pings_latest))
-        .route("/private/insert_ping", post(insert_ping))
+        .route("/pings/latest", get(pings_latest));
+    
+    let private_apis = Router::new()
+        .route("/insert_ping", post(insert_ping))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             api::middleware::require_api_key,
-        ))
+        ));
+    
+    let app = Router::new()
+        .route("/", get(root))
+        .nest("/public", public_endpoints)
+        .nest("/private/api", private_apis)
         .with_state(state);
-
     let listener = TcpListener::bind(&format!("0.0.0.0:{}", port))
         .await
         .unwrap();

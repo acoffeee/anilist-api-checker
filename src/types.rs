@@ -6,7 +6,7 @@ use tokio_rusqlite::rusqlite;
 pub struct FaasConfig {
     pub provider: String,
     pub arn: String,
-    pub region: i64,
+    pub region: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,12 +19,14 @@ pub struct PingsWithLimitParams {
     pub limit: Option<u32>,
 }
 
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Ping {
     pub ok: bool,
-    pub status: u16, // 0 = no response
+    pub status: i64, // 0 = no response
     pub latency_ms: i64,
     pub region: String,
+    // TODO: Implement Jiff for date time
     pub time: i64,
 }
 
@@ -39,14 +41,14 @@ pub struct ResponsePing {
     pub success: bool,
     // A VPS would use this to determine when to ping again,
     // but FaaS doesn't use this.
-    pub time_to_next_ping: i64,
+    pub time_to_next_ping: u64,
 }
 
 #[derive( Clone)]
 pub struct AppState {
     pub api_keys: Arc<Vec<String>>,
-    pub db: Arc<Db>,
-    pub pokers: Arc<Pokers>
+    pub db: Db,
+    pub pokers: Arc<Pokers>,
 }
 
 pub type Db = tokio_rusqlite::Connection;
@@ -54,7 +56,7 @@ pub type Db = tokio_rusqlite::Connection;
 pub type DbResult<T> =
     Result<T, tokio_rusqlite::Error<rusqlite::Error>>;
 pub struct Pokers {
-    aws_lambda: bool
+    pub aws_lambda: bool
     //loudflare_workers: bool,
     //google_cloud_functions: bool,
     //microsoft_azura_functions: bool,
