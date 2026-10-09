@@ -101,7 +101,13 @@ This is an example of how to list things you need to use the software and how to
 <!-- USAGE EXAMPLES -->
 ## Usage
 
-Use this space to show useful examples of how a project can be used. Additional screenshots, code examples and demos work well in this space. You may also link to more resources.
+### Efficency
+This project is highly concurrent. This is the flow for the `Event Scheduler`, the main loop that activates faas probes.
+![Example](images/ProbeSchedulerFlow.svg)
+So basically, the loop calls a function that checks which faas services are available, then it activates the runner for each if it is, asyncronisclly. So that both aws and azura can get creds from the env file at once.
+Then each service will run every function available to that provider concurrently.
+![Example](images/baremetal-prober-flow.svg)
+also i think its kind of cool the bare metal probers cause the server almost no stress and are self reliant for the most part
 
 _For more examples, please refer to the [Documentation](https://example.com)_
 
