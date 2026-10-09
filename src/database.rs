@@ -3,12 +3,9 @@ use tokio_rusqlite::rusqlite;
 // ---------- public API ----------
 
 pub async fn start_db() -> Db {
-    let path = std::env::var("DATABASE_PATH")
-        .unwrap_or_else(|_| "pings.db".into());
+    let path = std::env::var("DATABASE_PATH").unwrap_or_else(|_| "pings.db".into());
 
-    let db = Db::open(path)
-        .await
-        .expect("failed to open database");
+    let db = Db::open(path).await.expect("failed to open database");
 
     init_schema(&db).await;
 
@@ -21,7 +18,7 @@ async fn init_schema(db: &Db) {
             "CREATE TABLE IF NOT EXISTS region (
                 region TEXT PRIMARY KEY
             )",
-            []
+            [],
         );
         conn.execute(
             "CREATE TABLE IF NOT EXISTS pings (
@@ -69,20 +66,12 @@ pub async fn fetch_latest_ping(db: &Db) -> DbResult<Option<Ping>> {
 }
 
 /// The `limit` most recent pings, newest first.
-pub async fn fetch_latest_pings(
-    db: &Db,
-    limit: u32,
-) -> DbResult<Vec<Ping>> {
-    db.call(move |conn| {
-        sql::fetch_latest_pings(conn, limit)
-    })
-    .await
+pub async fn fetch_latest_pings(db: &Db, limit: u32) -> DbResult<Vec<Ping>> {
+    db.call(move |conn| sql::fetch_latest_pings(conn, limit))
+        .await
 }
 
-pub async fn insert_ping(
-    db: &Db,
-    ping: Ping
-) -> DbResult<()> {
+pub async fn insert_ping(db: &Db, ping: Ping) -> DbResult<()> {
     db.call(move |conn| {
         sql::insert_ping(
             conn,
@@ -90,8 +79,7 @@ pub async fn insert_ping(
             ping.ok,
             ping.status,
             ping.latency_ms,
-            ping.region
-
+            ping.region,
         )
     })
     .await
@@ -101,43 +89,27 @@ pub async fn fetch_faas_provider_configs(
     db: &Db,
     provider: String,
 ) -> Result<Vec<FaasConfig>, tokio_rusqlite::Error> {
-    db.call(move |conn| {
-        sql::fetch_faas_provider_configs(conn, &provider)
-    })
-    .await
+    db.call(move |conn| sql::fetch_faas_provider_configs(conn, &provider))
+        .await
 }
 
 pub async fn insert_faas_config(
     db: &Db,
     provider: String,
     arn: String,
-    region: String
+    region: String,
 ) -> DbResult<()> {
-    db.call(move |conn| {
-        sql::insert_faas_config(
-            conn,
-            &provider,
-            &arn,
-            region
-        )
-    })
-    .await
+    db.call(move |conn| sql::insert_faas_config(conn, &provider, &arn, region))
+        .await
 }
 
 // ---------- private: raw rusqlite ----------
 
 mod sql {
     use crate::types::{FaasConfig, Ping};
-    use tokio_rusqlite::rusqlite::{
-        self,
-        params,
-        Connection,
-        OptionalExtension,
-    };
+    use tokio_rusqlite::rusqlite::{self, Connection, OptionalExtension, params};
 
-    pub(super) fn ping_from(
-        row: &rusqlite::Row<'_>,
-    ) -> rusqlite::Result<Ping> {
+    pub(super) fn ping_from(row: &rusqlite::Row<'_>) -> rusqlite::Result<Ping> {
         Ok(Ping {
             time: row.get(0)?,
             ok: row.get::<_, i64>(1)? != 0,
@@ -147,10 +119,7 @@ mod sql {
         })
     }
 
-    pub(super) fn fetch_latest_pings(
-        conn: &Connection,
-        limit: u32,
-    ) -> rusqlite::Result<Vec<Ping>> {
+    pub(super) fn fetch_latest_pings(conn: &Connection, limit: u32) -> rusqlite::Result<Vec<Ping>> {
         let mut stmt = conn.prepare(
             "SELECT
                 time,
@@ -171,9 +140,7 @@ mod sql {
         Ok(rows)
     }
 
-    pub(super) fn fetch_latest_ping(
-        conn: &Connection,
-    ) -> rusqlite::Result<Option<Ping>> {
+    pub(super) fn fetch_latest_ping(conn: &Connection) -> rusqlite::Result<Option<Ping>> {
         conn.query_row(
             "SELECT
                 time,
@@ -208,13 +175,7 @@ mod sql {
                 region,
             )
             VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![
-                time,
-                ok as i64,
-                status,
-                latency_ms,
-                region
-            ],
+            params![time, ok as i64, status, latency_ms, region],
         )?;
 
         Ok(())
@@ -227,14 +188,14 @@ mod sql {
         let mut stmt = conn.prepare(
             "SELECT provider, arn, region_id
              FROM faas_config
-             WHERE provider = ?1"
-            );
-            let rows = stmt?
+             WHERE provider = ?1",
+        );
+        let rows = stmt?
             .query_map(params![provider], |row| {
-                Ok( FaasConfig {
+                Ok(FaasConfig {
                     provider: row.get(0)?,
                     arn: row.get(1)?,
-                    region: row.get(2)?
+                    region: row.get(2)?,
                 })
             })?
             .collect::<rusqlite::Result<Vec<FaasConfig>>>()?;
@@ -245,7 +206,7 @@ mod sql {
         conn: &Connection,
         provider: &str,
         arn: &str,
-        region: String
+        region: String,
     ) -> rusqlite::Result<()> {
         conn.execute(
             "INSERT INTO faas_config (

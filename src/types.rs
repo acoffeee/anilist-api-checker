@@ -19,7 +19,6 @@ pub struct PingsWithLimitParams {
     pub limit: Option<u32>,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Ping {
     pub ok: bool,
@@ -44,7 +43,7 @@ pub struct ResponsePing {
     pub time_to_next_ping: u64,
 }
 
-#[derive( Clone)]
+#[derive(Clone)]
 pub struct AppState {
     pub api_keys: Arc<Vec<String>>,
     pub db: Db,
@@ -53,14 +52,12 @@ pub struct AppState {
 
 pub type Db = tokio_rusqlite::Connection;
 
-pub type DbResult<T> =
-    Result<T, tokio_rusqlite::Error<rusqlite::Error>>;
+pub type DbResult<T> = Result<T, tokio_rusqlite::Error<rusqlite::Error>>;
 pub struct Pokers {
-    pub aws_lambda: bool
-    //loudflare_workers: bool,
-    //google_cloud_functions: bool,
-    //microsoft_azura_functions: bool,
-    //deno_deplou: bool,
-    //oracle: bool,
-    //socks5: bool,
+    pub aws_lambda: bool, //loudflare_workers: bool,
+                          //google_cloud_functions: bool,
+                          //microsoft_azura_functions: bool,
+                          //deno_deplou: bool,
+                          //oracle: bool,
+                          //socks5: bool,
 }

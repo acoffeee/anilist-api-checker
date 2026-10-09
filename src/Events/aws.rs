@@ -1,9 +1,9 @@
-use aws_sdk_lambda::Client;
-use aws_config::Region;
-use std::sync::Arc;
 use crate::database::{fetch_faas_provider_configs, insert_ping};
+use crate::types::{Db, DbResult, Ping, Pokers};
+use aws_config::Region;
+use aws_sdk_lambda::Client;
 use serde_json::Value;
-use crate::types::{Db, DbResult, Pokers, Ping};
+use std::sync::Arc;
 pub async fn run_job(db: Db) {
     let config = aws_config::load_from_env().await;
 
@@ -15,25 +15,17 @@ pub async fn run_job(db: Db) {
             return;
         }
     };
-    for config in aws_configs{
+    for config in aws_configs {
         let db = db.clone();
         //ngl we kinda hoping its cheap to clone
         let client = client.clone();
-        tokio::spawn ( async move {
-            let result = client
-                .invoke()
-                .function_name(&config.arn)
-                .send()
-                .await;
+        tokio::spawn(async move {
+            let result = client.invoke().function_name(&config.arn).send().await;
 
             let output = match result {
                 Ok(output) => output,
                 Err(e) => {
-                    eprintln!(
-                        "Failed to invoke {}: {:?}",
-                        config.arn,
-                        e
-                    );
+                    eprintln!("Failed to invoke {}: {:?}", config.arn, e);
                     return;
                 }
             };
@@ -42,23 +34,19 @@ pub async fn run_job(db: Db) {
                 //wont throw an error trust
                 Some(payload) => serde_json::from_slice(&payload.into_inner()).unwrap(),
                 None => {
-                    eprintln!(
-                        "Lambda {} returned no payload",
-                        config.arn
-                    );
+                    eprintln!("Lambda {} returned no payload", config.arn);
                     return;
                 }
             };
             let ping = Ping {
-                time:  response["time"].as_i64().unwrap(),
-                ok:  response["ok"].as_bool().unwrap(),
-                status:  response["status"].as_i64().unwrap(),
-                latency_ms:  response["latency_ms"].as_i64().unwrap(),
-                region: config.region
+                time: response["time"].as_i64().unwrap(),
+                ok: response["ok"].as_bool().unwrap(),
+                status: response["status"].as_i64().unwrap(),
+                latency_ms: response["latency_ms"].as_i64().unwrap(),
+                region: config.region,
             };
-            
-            if let Err(e) = insert_ping(&db,ping).await
-            {
+
+            if let Err(e) = insert_ping(&db, ping).await {
                 eprintln!("Failed to insert ping: {:?}", e);
             };
         });

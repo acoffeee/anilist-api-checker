@@ -1,8 +1,8 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use std::sync::Arc;
-use tokio::sync::watch;
-use tokio::time::{interval_at, Instant, MissedTickBehavior};
 use crate::Events::EventRunner::run_events;
+use std::sync::Arc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::sync::watch;
+use tokio::time::{Instant, MissedTickBehavior, interval_at};
 const PERIOD: Duration = Duration::from_secs(60);
 use crate::types::AppState;
 /// Snapshot of one tick of the loop.
@@ -100,6 +100,5 @@ fn until_next_minute() -> Duration {
     let remaining_seconds = 59 - seconds_into_minute;
     let remaining_nanos = 1_000_000_000 - nanos;
 
-    Duration::from_secs(remaining_seconds)
-        + Duration::from_nanos(remaining_nanos as u64)
+    Duration::from_secs(remaining_seconds) + Duration::from_nanos(remaining_nanos as u64)
 }

@@ -1,5 +1,5 @@
 use crate::database;
-use crate::types::{Db, PingsWithLimitParams, Ping, AppState};
+use crate::types::{AppState, Db, Ping, PingsWithLimitParams};
 use axum::{
     Json,
     extract::{Query, State},

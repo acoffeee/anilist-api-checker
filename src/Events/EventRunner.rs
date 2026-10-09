@@ -1,7 +1,7 @@
 //the point of this is to run any faas that are available
-use crate::types::{Pokers, Db, AppState};
-use std::sync::Arc;
 use crate::Events::aws;
+use crate::types::{AppState, Db, Pokers};
+use std::sync::Arc;
 ///Immediately spawning an async task bc this should mainly be async
 pub fn run_events(state: &Arc<AppState>) {
     let state_arc = state.clone();
