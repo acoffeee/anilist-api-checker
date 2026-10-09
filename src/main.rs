@@ -23,12 +23,6 @@ async fn main() {
         Ok(port) => port,
         Err(_) => "3000".into(),
     };
-    let api_keys: Vec<String> = std::env::var("API_KEYS")
-        .expect("API_KEYS env var must be set")
-        .split(',')
-        .map(|k| k.trim().to_string())
-        .filter(|k| !k.is_empty())
-        .collect();
     let db = start_db().await;
     let event_list = Pokers { aws_lambda: false };
     let state = AppState {
