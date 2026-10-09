@@ -1,5 +1,5 @@
 use crate::database::{fetch_faas_provider_configs, insert_ping};
-use crate::types::{Db, DbResult, Ping, Pokers};
+use crate::types::{Db, DbResult, Ping, Probers};
 use aws_config::Region;
 use aws_sdk_lambda::Client;
 use serde_json::Value;

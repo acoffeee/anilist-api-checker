@@ -1,12 +1,12 @@
 //the point of this is to run any faas that are available
 use crate::Events::aws;
-use crate::types::{AppState, Db, Pokers};
+use crate::types::{AppState, Db, Probers};
 use std::sync::Arc;
 ///Immediately spawning an async task bc this should mainly be async
 pub fn run_events(state: &Arc<AppState>) {
     let state_arc = state.clone();
     tokio::spawn(async move {
-        if state_arc.pokers.aws_lambda {
+        if state_arc.Probers.aws_lambda {
             ///each event should run conccurrently
             spawn_task(aws::run_job, state_arc.db.clone());
         }

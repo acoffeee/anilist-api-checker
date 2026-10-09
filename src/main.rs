@@ -13,7 +13,7 @@ use crate::api::routes::{
 use database::start_db;
 use dotenv::dotenv;
 use tokio::net::TcpListener;
-use types::{AppState, Pokers};
+use types::{AppState, Probers};
 mod Events;
 use std::sync::Arc;
 #[tokio::main]
@@ -24,11 +24,12 @@ async fn main() {
         Err(_) => "3000".into(),
     };
     let db = start_db().await;
-    let event_list = Pokers { aws_lambda: false };
+    let event_list = Probers { aws_lambda: false };
+    let api_keys: Vec<String> = Vec::new();
     let state = AppState {
         api_keys: Arc::new(api_keys),
         db,
-        pokers: Arc::new(event_list),
+        Probers: Arc::new(event_list),
     };
 
     let public_endpoints = Router::new()

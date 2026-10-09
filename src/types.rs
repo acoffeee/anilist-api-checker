@@ -47,13 +47,13 @@ pub struct ResponsePing {
 pub struct AppState {
     pub api_keys: Arc<Vec<String>>,
     pub db: Db,
-    pub pokers: Arc<Pokers>,
+    pub Probers: Arc<Probers>,
 }
 
 pub type Db = tokio_rusqlite::Connection;
 
 pub type DbResult<T> = Result<T, tokio_rusqlite::Error<rusqlite::Error>>;
-pub struct Pokers {
+pub struct Probers {
     pub aws_lambda: bool, //loudflare_workers: bool,
                           //google_cloud_functions: bool,
                           //microsoft_azura_functions: bool,
