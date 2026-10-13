@@ -47,7 +47,7 @@ async fn init_schema(db: &Db) {
         )?;
 
         conn.execute(
-            "CREATE TABLE IF NOT EXISTS vps_config (
+            "CREATE TABLE IF NOT EXISTS api_key (
                 api_key TEXT PRIMARY KEY,
                 region TEXT REFERENCES region(region)
             )",

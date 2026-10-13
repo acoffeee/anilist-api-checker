@@ -18,7 +18,12 @@ pub struct Region {
 pub struct PingsWithLimitParams {
     pub limit: Option<u32>,
 }
-
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ApiKey {
+    pub key: String,
+    pub region: String,
+    pub label: String,
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Ping {
     pub ok: bool,
