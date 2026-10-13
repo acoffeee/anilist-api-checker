@@ -3,18 +3,19 @@
 use reqwest;
 use std::time::Instant;
 use serde::{Deserialize, Serialize};
-
+use std::time::Duration;
 pub const URL: &str = "https://graphql.anilist.co";
 
 
 #[derive(Serialize, Deserialize)]
 pub struct PingResult {
-    pub time: i64
+    pub time: u64,
     pub ok: bool,
     pub status: u16,
     pub latency_ms: i64,
 }
-pub async fn prober(client: &reqwest::Client) -> PingResult {
+
+pub async fn prober(client: &reqwest::Client, ) -> PingResult {
     let body = serde_json::json!({
         "query": "query ($page: Int) { Page(page: $page, perPage: 1) { media { id } } }",
         "variables": { "page": fastrand::u32(1..=5000) }
@@ -22,23 +23,29 @@ pub async fn prober(client: &reqwest::Client) -> PingResult {
     let start = Instant::now();
     match client.post(URL).json(&body).send().await {
         Ok(r) => {
+            let end = Instant::now();
+            let time = end.duration_since(start).as_secs();
             let status = r.status();
             let text = r.text().await.unwrap_or_default();
             let latency_ms = i64::try_from(start.elapsed().as_millis()).unwrap_or(i64::MAX);
             let ok = status.is_success() && !text.contains("\"errors\"");
             PingResult {
-                time: start,
+                time: time,
                 ok,
                 status: status.as_u16(),
                 latency_ms
             }
         }
-        Err(f) => PingResult {
-            time: start,
-            ok: false,
-            status: f.status().map_or(0, |s| s.as_u16()),
-            latency_ms: i64::try_from(start.elapsed().as_millis()).unwrap_or(i64::MAX),
-        },
+        Err(f) =>  {
+            let end = Instant::now();
+            let time = end.duration_since(start).as_secs();
+            PingResult {
+                time: time,
+                ok: false,
+                status: f.status().map_or(0, |s| s.as_u16()),
+                latency_ms: i64::try_from(start.elapsed().as_millis()).unwrap_or(i64::MAX),
+            }
+        }
     }
 }
 
