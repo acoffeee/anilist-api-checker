@@ -1,6 +1,6 @@
 use lambda_runtime::{Error, LambdaEvent};
 use serde_json::Value;
-use Poker::{PingResult, poker};
+use Prober::{PingResult, Prober};
 use reqwest::Client;
 /// This is the main body for the function.
 /// Write your code inside it.
@@ -13,7 +13,7 @@ pub(crate)async fn function_handler(event: LambdaEvent<Value>) -> Result<PingRes
     let client = Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()?;
-    let ping_result: PingResult = poker(&client).await;
+    let ping_result: PingResult = prober(&client).await;
     return Ok(ping_result);
 }
 

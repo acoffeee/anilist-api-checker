@@ -14,7 +14,7 @@ pub struct PingResult {
     pub status: u16,
     pub latency_ms: i64,
 }
-pub async fn poker(client: &reqwest::Client) -> PingResult {
+pub async fn prober(client: &reqwest::Client) -> PingResult {
     let body = serde_json::json!({
         "query": "query ($page: Int) { Page(page: $page, perPage: 1) { media { id } } }",
         "variables": { "page": fastrand::u32(1..=5000) }
